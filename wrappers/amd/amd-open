@@ -1,0 +1,13 @@
+(function (root, factory, getModules) {
+	var __Dependencies = getModules();
+	var require = function(name){
+		return __Dependencies[name];
+	}
+    if (typeof define === 'function' && define.amd) {
+        define([], function(){factory(require)});
+    } else if (typeof module === 'object' && module.exports) {
+        module.exports = factory(require);
+    } else {
+        root.@name@ = factory(require);
+  }
+}(this, function (require) {

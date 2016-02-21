@@ -1,0 +1,22 @@
+{
+  "name": "module-pack",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node ./index.js -i ./test/lib/index.js -o ./test/src/test.js -n testModule"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/VashurkinAnton/amd-pack.git"
+  },
+  "dependencies":{
+    "uglify-js":"2.6.1",
+    "commander":"2.9.0"
+  },
+  "author": "Anton Vashurkin <cronosfera2@gmail.com>",
+  "license": "MIT"
+}

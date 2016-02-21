@@ -1,0 +1,9 @@
+}, function(){
+	var __Dependencies = {};
+	var require = function(name){
+		return __Dependencies[name];
+	}
+	var _exports = function(path, module){__Dependencies[path] = module};
+@AMD_MODULES@
+	return __Dependencies;
+}));

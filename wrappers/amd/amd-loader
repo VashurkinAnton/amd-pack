@@ -1,0 +1,11 @@
+	//Module file: @PATH@
+	(function(){
+		var module = {};
+		Object.defineProperty(module, 'exports', {
+			get: function(){
+				return {};
+			},
+			set: _exports.bind(null, '@PATH@')
+		});
+	@AMD_MODULE@
+	}());
