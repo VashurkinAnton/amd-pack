@@ -15,6 +15,7 @@ commander
 var loadedFiles = {};
 var watchedFiles = {};
 var deps = [];
+var rootDir = path.dirname(__filename);
 
 function isRequire(str){
 	var test = 'require';
@@ -133,9 +134,9 @@ function getPaths(source){
 }
 function wrapper(wrapper, source, name, deps){
 	deps.reverse();
-	var open = fs.readFileSync('./wrappers/amd/'+wrapper+"-open", 'utf-8');
-	var close = fs.readFileSync('./wrappers/amd/'+wrapper+"-close", 'utf-8');
-	var amdLoader = fs.readFileSync('./wrappers/amd/'+wrapper+"-loader", 'utf-8');
+	var open = fs.readFileSync(path.resolve(rootDir, './wrappers/amd/'+wrapper+"-open"), 'utf-8');
+	var close = fs.readFileSync(path.resolve(rootDir, './wrappers/amd/'+wrapper+"-close"), 'utf-8');
+	var amdLoader = fs.readFileSync(path.resolve(rootDir, './wrappers/amd/'+wrapper+"-loader"), 'utf-8');
 
 	return (
 		open.replace('@name@', name) + 
