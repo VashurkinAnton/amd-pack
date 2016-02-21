@@ -1,6 +1,6 @@
 {
   "name": "amd-pack",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "",
   "main": "index.js",
   "directories": {
@@ -15,7 +15,11 @@
   },
   "dependencies":{
     "uglify-js":"2.6.1",
-    "commander":"2.9.0"
+    "commander":"2.9.0",
+    "ws":"1.0.1",
+  },
+  "devDependencies":{
+    "express":"4.13.4"
   },
   "author": "Anton Vashurkin <cronosfera2@gmail.com>",
   "license": "MIT"

@@ -2,6 +2,7 @@ var fs = require('fs');
 var path = require('path');
 var uglify = require('uglify-js');
 var commander = require('commander');
+var wss;
 
 commander
   .version('1.0.0')
@@ -10,12 +11,14 @@ commander
   .option('-n, --name [string]', 'Module name for global init.')
   .option('-m, --minify', 'Minify builded file')
   .option('-w, --watch', 'Watch all dependencies, and rebuild module if it\'s changed.')
+  .option('--ws, --socketUpdate', 'Refesh page after rebuild. Used with --watch.')
   .parse(process.argv);
 
 var loadedFiles = {};
 var watchedFiles = {};
 var deps = [];
 var rootDir = path.dirname(__filename);
+var wsInjection = fs.readFileSync(path.resolve(rootDir, "./ws-injection.js"), 'utf-8');
 
 function isRequire(str){
 	var test = 'require';
@@ -230,7 +233,12 @@ function build(options){
 			var start = +new Date();
 			unWatch();
 			build(options);
-			console.log('rebuild date:', new Date(), '; rebuild time:', +new Date - start ,'ms');
+			console.log('rebuild date:', new Date().toString().split(' GMT')[0] + '; rebuild time:', +new Date - start ,'ms;');
+			if(options.socketUpdate){
+				wss.clients.forEach(function(client){
+					client.send('refresh');
+				});
+			}
 		};
 		var watch = function(){
 			for(var i = 0, k = Object.keys(watchedFiles), key = k[0], l = k.length; i < l; i++, key = k[i]){
@@ -250,6 +258,9 @@ function build(options){
 	if(options.minify){
 		result = uglify.minify(result, {fromString: true}).code;
 	}
+	if(options.socketUpdate){
+		result = wsInjection + '\n' + result;
+	}
 	if(options.output){
 		fs.writeFileSync(options.output.replace('@name@', options.name), result, 'utf-8');
 	}else{
@@ -258,9 +269,20 @@ function build(options){
 }
 
 if(commander.input && commander.output){
+	if(commander.socketUpdate){
+		wss = require('ws').Server({ port: 8721 });
+		console.log('WSS started on 8721.');
+	}
 	var start = +new Date();
-	build({input: commander.input, output: commander.output, name: commander.name, minify: commander.minify, watch: commander.watch});
-	console.log('Build date:', new Date(), '; build time:', +new Date - start ,'ms');
+	build({
+		input: commander.input, 
+		output: commander.output, 
+		name: commander.name, 
+		minify: commander.minify, 
+		watch: commander.watch, 
+		socketUpdate: commander.socketUpdate
+	});
+	console.log('Build date:', new Date().toString().split(' GMT')[0] + '; build time:', +new Date - start ,'ms;');
 }else{
 	module.exports = build;
 }

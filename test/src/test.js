@@ -1,3 +1,5 @@
+var refreshSocket = new WebSocket("ws://" + window.location.hostname + ':8721');
+refreshSocket.onmessage = function(){	window.location.reload(); };
 (function (root, factory, getModules) {
 	var __Dependencies = getModules();
 	var require = function(name){
@@ -15,6 +17,9 @@
 	var $ = require('/amd-pack/node_modules/jquery/dist/jquery.js');
 	two();
 	$('body').append('<div>It\'s worked!</div>');
+	return  function(){
+		console.log('Test module.');
+	}
 }, function(){
 	var __Dependencies = {};
 	var require = function(name){
