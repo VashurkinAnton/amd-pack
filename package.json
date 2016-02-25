@@ -1,13 +1,16 @@
 {
   "name": "amd-pack",
-  "version": "1.0.2",
-  "description": "",
+  "version": "1.0.3",
+  "description": "Quick build your app into AMD library. No setting files only one command!",
   "main": "index.js",
   "directories": {
     "test": "test"
   },
+  "bin":{
+    "npm-pack": "./bin/npm-pack"
+  },
   "scripts": {
-    "test": "node ./index.js -i ./test/lib/index.js -o ./test/src/test.js -n testModule"
+    "test": "node ./bin/npm-pack -i ./test/lib/index.js -o ./test/src/test.js -n testModule"
   },
   "repository": {
     "type": "git",
@@ -16,11 +19,12 @@
   "dependencies":{
     "uglify-js":"2.6.1",
     "commander":"2.9.0",
-    "ws":"1.0.1",
+    "ws":"1.0.1"
   },
   "devDependencies":{
     "express":"4.13.4"
   },
   "author": "Anton Vashurkin <cronosfera2@gmail.com>",
+  "keywords": ["javascript", "AMD", "UMD", "amd-pack", "commonjs", "require", "browser"],
   "license": "MIT"
 }

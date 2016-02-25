@@ -1,0 +1,29 @@
+#!/usr/bin/env node
+
+var commander = require('commander');
+var build = require('../index.js');
+
+commander
+  .version('1.0.0')
+  .option('-i, --input [path]', 'Path to root file for build.')
+  .option('-o, --output [path]', 'Path to file for save result.')
+  .option('-n, --name [string]', 'Module name for global init.')
+  .option('-m, --minify', 'Minify builded file')
+  .option('-w, --watch', 'Watch all dependencies, and rebuild module if it\'s changed.')
+  .option('--ws, --socketUpdate', 'Refesh page after rebuild. Used with --watch.')
+  .parse(process.argv);
+
+if(commander.input && commander.output){
+	console.time('build time:');
+	build({
+		input: commander.input, 
+		output: commander.output, 
+		name: commander.name, 
+		minify: commander.minify, 
+		watch: commander.watch, 
+		socketUpdate: commander.socketUpdate
+	});
+	console.timeEnd('build time:');
+}else{
+	throw Error('Input or output options not fined.');
+}

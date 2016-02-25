@@ -1,18 +1,7 @@
 var fs = require('fs');
 var path = require('path');
 var uglify = require('uglify-js');
-var commander = require('commander');
 var wss;
-
-commander
-  .version('1.0.0')
-  .option('-i, --input [path]', 'Path to root file for build.')
-  .option('-o, --output [path]', 'Path to file for save result.')
-  .option('-n, --name [string]', 'Module name for global init.')
-  .option('-m, --minify', 'Minify builded file')
-  .option('-w, --watch', 'Watch all dependencies, and rebuild module if it\'s changed.')
-  .option('--ws, --socketUpdate', 'Refesh page after rebuild. Used with --watch.')
-  .parse(process.argv);
 
 var loadedFiles = {};
 var watchedFiles = {};
@@ -142,7 +131,7 @@ function wrapper(wrapper, source, name, deps){
 	var amdLoader = fs.readFileSync(path.resolve(rootDir, './wrappers/amd/'+wrapper+"-loader"), 'utf-8');
 
 	return (
-		open.replace('@name@', name) + 
+		open.replace('@name@', name).replace('@wsInjection@', wss ? wsInjection : '') + 
 		'\n\t' + 
 		indent(exportsToReturn(source)) + 
 		'\n' + 
@@ -224,21 +213,26 @@ function resolveFiles(rootFile, cutter, isRoot, options){
 	}
 }
 function build(options){
+	if(!wss && options.socketUpdate){
+		wss = require('ws').Server({ port: 8721 });
+		console.log('WSS started on 8721.');
+	}
+
 	if(!options.cut){ options.cut = path.resolve('../') }
 	if(!options.wrapper){ options.wrapper = 'amd'; }
 	if(!options.name){ options.name = __dirname.replace(/\\/ig, '/').split('/').pop() + (new Date().getTime()); }
 	var root = resolveFiles(options.input, cutter.bind({paths: {}, index: -1}, options.cut, options.minify), true, options);
 	if(options.watch && options.output){
 		var watcher = function(prev, next){
-			var start = +new Date();
+			console.time('rebuild time:');
 			unWatch();
 			build(options);
-			console.log('rebuild date:', new Date().toString().split(' GMT')[0] + '; rebuild time:', +new Date - start ,'ms;');
 			if(options.socketUpdate){
 				wss.clients.forEach(function(client){
 					client.send('refresh');
 				});
 			}
+			console.timeEnd('rebuild time:');
 		};
 		var watch = function(){
 			for(var i = 0, k = Object.keys(watchedFiles), key = k[0], l = k.length; i < l; i++, key = k[i]){
@@ -258,9 +252,6 @@ function build(options){
 	if(options.minify){
 		result = uglify.minify(result, {fromString: true}).code;
 	}
-	if(options.socketUpdate){
-		result = wsInjection + '\n' + result;
-	}
 	if(options.output){
 		fs.writeFileSync(options.output.replace('@name@', options.name), result, 'utf-8');
 	}else{
@@ -268,21 +259,4 @@ function build(options){
 	}
 }
 
-if(commander.input && commander.output){
-	if(commander.socketUpdate){
-		wss = require('ws').Server({ port: 8721 });
-		console.log('WSS started on 8721.');
-	}
-	var start = +new Date();
-	build({
-		input: commander.input, 
-		output: commander.output, 
-		name: commander.name, 
-		minify: commander.minify, 
-		watch: commander.watch, 
-		socketUpdate: commander.socketUpdate
-	});
-	console.log('Build date:', new Date().toString().split(' GMT')[0] + '; build time:', +new Date - start ,'ms;');
-}else{
-	module.exports = build;
-}
+module.exports = build;

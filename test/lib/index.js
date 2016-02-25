@@ -1,9 +1,8 @@
 var two = require('../include/two.js');
-var $ = require('jquery');
+//var $ = require('jquery');
 
 two();
-$('body').append('<div>It\'s worked!</div>');
 
 module.exports = function(){
-	console.log('Test module.');
+	$('body').append('<div style="color: red;">It\'s worked!</div>');
 }

@@ -1,4 +1,5 @@
 (function (root, factory, getModules) {
+    @wsInjection@
 	var __Dependencies = getModules();
 	var require = function(name){
 		return __Dependencies[name];
