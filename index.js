@@ -1,6 +1,7 @@
 var fs = require('fs');
 var path = require('path');
 var uglify = require('uglify-js');
+var async = require('async');
 var wss;
 
 var loadedFiles = {};
@@ -9,18 +10,42 @@ var deps = [];
 var rootDir = path.dirname(__filename);
 var wsInjection = fs.readFileSync(path.resolve(rootDir, "./ws-injection.js"), 'utf-8');
 
-function isRequire(str){
-	var test = 'require';
-	var len = str.length; 
-	var result = false;
-	var isFull = false;
-	if(len < 7){
-		result = test.substring(0, len) === str;
-	}else{
-		result = isFull = test === str;
+var includeModifers = {
+	string: function(source){
+		return 'module.export = "'+source.replace(/[\"\n\r]/ig, function(ch){
+			if(ch === '\"'){
+				return '\\"';
+			}else{
+				return '\\n';
+			}
+		})+'";';
+	},
+	function: function(source){
+		return 'module.export = function(){ \n\treturn '+source+'};';
 	}
-	return {test: result, full: isFull};
 }
+
+function TestString(testString){
+	var tests = [];
+	var testStringLength = testString.length;
+	for(var i = 1, len = testStringLength + 1; i < len; i++){
+		tests.push('\t\t' + i + ':' + '"' + testString.substring(0, i) + '"');
+	}
+	var source = [
+		'\tvar test = {',
+			tests.join(',\n'),
+		'\t};',
+		'\tvar len = str.length;',
+		'\tvar result = test[len] === str;',
+		'\tvar isFull = result ? ' + testStringLength + ' === len : false ;',
+		'\treturn {test: result, full: isFull};'
+	];
+	
+	return Function('str', source.join('\n'));
+}
+var isRequire = TestString('require');
+var isAmdPack = TestString('amdPack.include');
+
 var isWhiteSpace = {
 	'\n': 1,
 	'\r': 1,
@@ -95,15 +120,31 @@ function getPath(source, cursor){
 	}
 	return {cursor: cursor, path: path};
 }
+function getAmdArguments(source, cursor){
+	var path = getPath(source, cursor);
+	path.cursor = skipWhiteSpaces(source, path.cursor);
+	path.cursor += 1;
+	path.cursor = skipWhiteSpaces(source, path.cursor);
+
+	var type = skipString(source, path.cursor, true);
+	return {
+		cursor: type.cursor,
+		path: path.path,
+		type: type.string
+	}
+}
 function getPaths(source){
-	var ch, cursor = 0, buffer = '', paths = [];
+	var ch, cursor = 0, buffer = {require: '', include: ''}, paths = [];
 	while(ch = source[cursor]){
 		if(ch === '/' && (source[cursor + 1] === '/' || source[cursor + 1] === '*')){
 			cursor = skipComment(source, cursor);
 		}
-		if(buffer){
-			buffer += ch;
-			var requireTest = isRequire(buffer);
+		if(ch === "'" || ch === '"'){
+			cursor = skipString(source, cursor).cursor;
+		}
+		if(buffer.require){
+			buffer.require += ch;
+			var requireTest = isRequire(buffer.require);
 			if(requireTest.test){
 				if(requireTest.full){
 					var result = getPath(source, cursor + 1);
@@ -111,18 +152,37 @@ function getPaths(source){
 					if(result.path){
 						paths.push(result.path);
 					}
-					buffer = '';
+					buffer.require = '';
 				}
 			}else{
-				buffer = '';
+				buffer.require = '';
 			}
 		}
-		if(ch === 'r' && !buffer){
-			buffer += ch;
+		if(buffer.include){
+			buffer.include += ch;
+			var requireTest = isAmdPack(buffer.include);
+			if(requireTest.test){
+				if(requireTest.full){
+					var result = getAmdArguments(source, cursor + 1);
+					cursor = result.cursor;
+					if(result.path){
+						paths.push(result);
+					}
+					buffer.include = '';
+				}
+			}else{
+				buffer.include = '';
+			}
+		}
+		if(ch === 'r' && !buffer.require){
+			buffer.require += ch;
+		}
+		if(ch === 'a' && !buffer.include){
+			buffer.include += ch;	
 		}
 		cursor += 1;
 	}
-	return paths;
+	return {paths: paths, source: source};
 }
 function wrapper(wrapper, source, name, deps){
 	deps.reverse();
@@ -136,6 +196,9 @@ function wrapper(wrapper, source, name, deps){
 		indent(exportsToReturn(source)) + 
 		'\n' + 
 		close.replace('@AMD_MODULES@', deps.map(function(module){
+			if(module.type && includeModifers[module.type]){
+				module.dep = includeModifers[module.type](module.dep);
+			}
 			return amdLoader.replace(/\@PATH\@/ig, module.path).replace('@AMD_MODULE@', '\t'+indent(module.dep, '\t\t'));
 		}).join('\n'))
 	);
@@ -145,15 +208,16 @@ function indent(source, indent){
 	return source.replace(/[\n\r]+/ig, '\n' + (indent || '\t'));
 }
 function getDependencies(source, resolveDir, cutter){
-	var deps = getPaths(source || '').map(function(dep){
-		var resolvedPath = path.resolve(resolveDir, dep);
+	var result = getPaths(source || '');
+	var deps = result.paths.map(function(dep){
+		var resolvedPath = path.resolve(resolveDir, dep.path || dep);
 		try{
 			fs.statSync(resolvedPath);
 		}catch(e){
 			resolvedPath = require.resolve(dep);
 		}
-		source = source.replace(dep, cutter(resolvedPath));
-		return resolvedPath;
+		source = source.replace(dep.path || dep, cutter(resolvedPath));
+		return dep.path ? {path: resolvedPath, type: dep.type} : resolvedPath;
 	}).filter(Boolean);
 	return {deps: deps, source: source};
 }
@@ -174,89 +238,146 @@ function cutter(cut, minify, path){
 function exportsToReturn(source){
 	return source.replace(/module\.?\[?\'?\"?exports\"?\'?\]?[ \t\n\r]*\=/ig, 'return ');
 }
-
-function resolveFiles(rootFile, cutter, isRoot, options){
-	var resolvedPath = path.resolve(rootFile);
-	var source = fs.readFileSync(resolvedPath, 'utf-8');
-	var result = getDependencies(source, getDir(rootFile), cutter);
-	var cuttedPath = cutter(resolvedPath);
-	if(!isRoot){
-		if(!loadedFiles[cuttedPath]){
-			deps.push({path: cuttedPath, dep: result.source});
-		}else{
-			var priorityDep;
-			for(var i = 0, len = deps.length; i < len; i++){
-				if(deps[i]['path'] === cuttedPath){
-					priorityDep = deps.splice(i, 1)[0];
-					break;
-				}
-			}
-			deps.push(priorityDep); priorityDep = null;
-		}
-	}
-
-	loadedFiles[cuttedPath] = true;
-	watchedFiles[resolvedPath] = true;
-	result.deps.forEach(function(source){
-		if(!loadedFiles[source]){
-			resolveFiles(source, cutter);
-		}
+function runBuilders(type, path, source, builders, cl){
+	var activeBuilders = builders.filter(function(item){return item.action === type && (!item.ext || item.ext.test(path)) });
+	async.each(activeBuilders, function(builder, callback){
+		builder.handler(source, function(newSource){
+			source = newSource;
+			callback();
+		});
+	}, function(){
+		cl(source);
 	});
-	if(isRoot){
-		var _deps = deps;
-		deps = [];
-		loadedFiles = {};
-		if(!options.watch){
-			watchedFiles = {};
-		}
-		return {path: cuttedPath, source: result.source, deps: _deps};	
+}
+function loadFile(path, builders, cl){
+	var source = fs.readFileSync(path, 'utf-8');
+	if(!builders){
+		cl(source);
+	}else{
+		runBuilders('loading', path, source, builders, cl)
 	}
 }
-function build(options){
+function resolveFiles(rootFile, options, isRoot, cl){
+	var end;
+	var wrapperType;
+	if(rootFile.path){
+		wrapperType = rootFile.type;
+		rootFile = rootFile.path;
+	}
+	var resolvedPath = path.resolve(rootFile);
+	loadFile(resolvedPath, options.builders, function(source){
+		var result = getDependencies(source, getDir(rootFile), options.cutter);
+		var cuttedPath = options.cutter(resolvedPath);
+		if(!isRoot){
+			if(!loadedFiles[cuttedPath]){
+				deps.push({path: cuttedPath, dep: result.source, type: wrapperType});
+			}else{
+				var priorityDep;
+				for(var i = 0, len = deps.length; i < len; i++){
+					if(deps[i]['path'] === cuttedPath){
+						priorityDep = deps.splice(i, 1)[0];
+						break;
+					}
+				}
+				deps.push(priorityDep); priorityDep = null;
+			}
+		}else{
+			end = function(){
+				if(isRoot){
+					var _deps = deps;
+					deps = [];
+					loadedFiles = {};
+					if(!options.watch){
+						watchedFiles = {};
+					}
+					cl({path: cuttedPath, source: result.source, deps: _deps});	
+				}
+				return true;
+			}
+		}
+
+		loadedFiles[cuttedPath] = true;
+		watchedFiles[resolvedPath] = true;
+		
+
+		result.deps = result.deps.filter(function(source){
+			return !loadedFiles[source.path || source];
+		});
+
+		if(result.deps.length){
+			async.parallel(
+				result.deps.map(function(source){
+					return function(callback){
+						resolveFiles(source, options, false, function(){
+							callback(null, true);
+						});
+					}
+				}), 
+				end
+			);
+		}else{
+			(!!end && end()) || (!!cl && cl());
+		}
+	});
+}
+function build(options, cl){
 	if(!wss && options.socketUpdate){
 		wss = require('ws').Server({ port: 8721 });
 		console.log('WSS started on 8721.');
 	}
 
 	if(!options.cut){ options.cut = path.resolve('../') }
+		options.cutter = cutter.bind({paths: {}, index: -1}, options.cut, options.minify);
+
 	if(!options.wrapper){ options.wrapper = 'amd'; }
 	if(!options.name){ options.name = __dirname.replace(/\\/ig, '/').split('/').pop() + (new Date().getTime()); }
-	var root = resolveFiles(options.input, cutter.bind({paths: {}, index: -1}, options.cut, options.minify), true, options);
-	if(options.watch && options.output){
-		var watcher = function(prev, next){
-			console.time('rebuild time:');
-			unWatch();
-			build(options);
-			if(options.socketUpdate){
-				wss.clients.forEach(function(client){
-					client.send('refresh');
-				});
-			}
-			console.timeEnd('rebuild time:');
-		};
-		var watch = function(){
-			for(var i = 0, k = Object.keys(watchedFiles), key = k[0], l = k.length; i < l; i++, key = k[i]){
-			    fs.watchFile(key, watcher);
+	if(options.builders){
+		for(var i = 0, len = options.builders.length; i < len; i++){
+			var ext = options.builders[i].ext;
+			if(ext){
+				options.builders[i].ext = ext ? new RegExp('\\.'+ext+'$','i') : /\.[^]+?$/i;
 			}
 		}
-		var unWatch = function(){
-			for(var i = 0, k = Object.keys(watchedFiles), key = k[0], l = k.length; i < l; i++, key = k[i]){
-			    fs.unwatchFile(key, watcher);
+	}
+	resolveFiles(options.input, options, true, function(root){
+		if(options.watch && options.output){
+			var watcher = function(prev, next){
+				console.time('rebuild time:');
+				unWatch();
+				build(options);
+				if(options.socketUpdate){
+					wss.clients.forEach(function(client){
+						client.send('refresh');
+					});
+				}
+				console.timeEnd('rebuild time:');
+			};
+			var watch = function(){
+				for(var i = 0, k = Object.keys(watchedFiles), key = k[0], l = k.length; i < l; i++, key = k[i]){
+				    fs.watchFile(key, watcher);
+				}
 			}
-			watchedFiles = {};
-		};
-		watch();
-	}
-	
-	var result = wrapper(options.wrapper, root.source, options.name, root.deps);
-	if(options.minify){
-		result = uglify.minify(result, {fromString: true}).code;
-	}
-	if(options.output){
-		fs.writeFileSync(options.output.replace('@name@', options.name), result, 'utf-8');
-	}else{
-		return result
-	}
+			var unWatch = function(){
+				for(var i = 0, k = Object.keys(watchedFiles), key = k[0], l = k.length; i < l; i++, key = k[i]){
+				    fs.unwatchFile(key, watcher);
+				}
+				watchedFiles = {};
+			};
+			watch();
+		}
+		
+		var result = wrapper(options.wrapper, root.source, options.name, root.deps);
+		runBuilders('packing', null, result, options.builders, function(result){
+			if(options.minify){
+				result = uglify.minify(result, {fromString: true}).code;
+			}
+			if(options.output){
+				fs.writeFileSync(options.output.replace('@name@', options.name), result, 'utf-8');
+			}else if(cl){
+				cl(result);
+			}
+		})
+	});
 }
 
 module.exports = build;

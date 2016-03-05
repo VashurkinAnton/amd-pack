@@ -1,4 +1,4 @@
-# AMD-PACK. No options only one command!
+# AMD-PACK. No setting files only one command!
 
 Quick build your app into AMD library, while retaining all the dependencies. Automatic building and rebooting the client. 
 
@@ -46,6 +46,61 @@ amd-pack [options]
 ```
 	amd-pack --ws // show all options
 ```
+
+# Including files in project
+```
+	// @arguments: pathToFile <string>, wrapperType <string>
+	var file = amdPack.include('./file.md', 'string');
+	console.log(file);
+```
+## wrappers for included files
+
+### string
+
+Include file like string.
+
+### function
+
+Include file like function.
+
+# Builders
+
+```
+	var builder = require('amd-pack');
+	builder({
+		input: './dist/component.jsx',
+		output: './src/Slider.js',
+		name: 'Slider',
+		builders: [
+			{
+				'ext': 'less',
+				'action': 'loading',
+				handler: function(source, next){
+					setTimeout(function(){
+						console.log('Less');
+						next(source);
+					}, 10);
+				}
+			},
+			{
+				'ext': 'jsx?',
+				'action': 'loading',
+				handler: function(source, next){
+					console.log('JSX');
+					next(source);
+				}
+			},
+			{
+				'action': 'packing',
+				handler: function(source, next){
+					console.log('packing');
+					next(source);
+				}
+			}
+		]
+	});
+```
+
 # Importantly!
 
 Commented out modules will not be added to the project!

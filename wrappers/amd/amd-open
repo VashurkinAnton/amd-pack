@@ -11,4 +11,5 @@
     } else {
         root.@name@ = factory(require);
   }
-}(this, function (require) {
+}(this, function (require) { 
+    var amdPack = {include: require};
