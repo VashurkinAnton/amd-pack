@@ -73,8 +73,8 @@ Include file like function.
 		name: 'Slider',
 		builders: [
 			{
-				'ext': 'less',
-				'action': 'loading',
+				ext: 'less',
+				action: 'loading',
 				handler: function(source, next){
 					setTimeout(function(){
 						console.log('Less');
@@ -83,8 +83,47 @@ Include file like function.
 				}
 			},
 			{
-				'ext': 'jsx?',
-				'action': 'loading',
+				ext: 'jsx?',
+				action: 'loading',
+				handler: function(source, next){
+					console.log('JSX');
+					next(source);
+				}
+			},
+			{
+				action: 'packing',
+				handler: function(source, next){
+					console.log('packing');
+					next(source);
+				}
+			}
+		]
+	});
+```
+## Skip options
+For skiping some file you need added RegExp string for some path.
+```
+	var builder = require('amd-pack');
+	builder({
+		input: './dist/component.jsx',
+		output: './src/Slider.js',
+		name: 'Slider',
+		skip: ['node_modules'], // skip all files from node_modules
+		builders: [
+			{
+				ext: 'less',
+				action: 'loading',
+				skip: ['slider-skins\\.less'] // skip all "slider-skins.less" in this builder
+				handler: function(source, next){
+					setTimeout(function(){
+						console.log('Less');
+						next(source);
+					}, 10);
+				}
+			},
+			{
+				ext: 'jsx?',
+				action: 'loading',
 				handler: function(source, next){
 					console.log('JSX');
 					next(source);

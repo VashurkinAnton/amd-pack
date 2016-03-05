@@ -7,3 +7,9 @@
 ## 5.03.2016
 	- Rewrited arguments in resolveFiles function
 	- Added builders 
+
+# 1.0.6
+## 5.03.2016
+	- Fixed resolving
+	- Added async reading for resolving files
+	- Added skip options for global init and builder only

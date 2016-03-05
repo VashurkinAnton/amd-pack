@@ -4,6 +4,7 @@ builder({
 	input: './dist/component.jsx',
 	output: './src/Slider.js',
 	name: 'Slider',
+	skip: ['component\\.jsx$'],
 	builders: [
 		{
 			'ext': 'less',
@@ -30,6 +31,5 @@ builder({
 				next(source);
 			}
 		}
-	]//,
-	//minify: true
+	]
 });

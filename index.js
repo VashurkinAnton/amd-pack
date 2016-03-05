@@ -239,7 +239,15 @@ function exportsToReturn(source){
 	return source.replace(/module\.?\[?\'?\"?exports\"?\'?\]?[ \t\n\r]*\=/ig, 'return ');
 }
 function runBuilders(type, path, source, builders, cl){
-	var activeBuilders = builders.filter(function(item){return item.action === type && (!item.ext || item.ext.test(path)) });
+	var activeBuilders = builders.filter(function(item){
+		return (
+			item.action === type && 
+			(!item.ext || item.ext.test(path)) &&
+			!item.skip.some(function(re){
+				return re.test(path);
+			})
+		)
+	});
 	async.each(activeBuilders, function(builder, callback){
 		builder.handler(source, function(newSource){
 			source = newSource;
@@ -250,12 +258,13 @@ function runBuilders(type, path, source, builders, cl){
 	});
 }
 function loadFile(path, builders, cl){
-	var source = fs.readFileSync(path, 'utf-8');
-	if(!builders){
-		cl(source);
-	}else{
-		runBuilders('loading', path, source, builders, cl)
-	}
+	fs.readFile(path, 'utf-8', function(err, source){
+		if(!builders){
+			cl(source);
+		}else{
+			runBuilders('loading', path, source, builders, cl)
+		}
+	});
 }
 function resolveFiles(rootFile, options, isRoot, cl){
 	var end;
@@ -313,12 +322,28 @@ function resolveFiles(rootFile, options, isRoot, cl){
 						});
 					}
 				}), 
-				end
+				end || cl
 			);
 		}else{
 			(!!end && end()) || (!!cl && cl());
 		}
 	});
+}
+
+function strToRe(arr, context){
+	reArr = [];
+	if(Array.isArray(arr)){
+		for(var i = 0, len = arr.length; i < len; i++){
+			if(typeof arr[i] === 'string'){
+				reArr.push(new RegExp(arr[i], 'ig'));
+			}else{
+				console.warn(context + ' skip option with index '+i+' is not a string for RE.');
+			}
+		}
+	}else{
+		console.warn(context + ' skip option is not a array');
+	}
+	return reArr;
 }
 function build(options, cl){
 	if(!wss && options.socketUpdate){
@@ -331,12 +356,18 @@ function build(options, cl){
 
 	if(!options.wrapper){ options.wrapper = 'amd'; }
 	if(!options.name){ options.name = __dirname.replace(/\\/ig, '/').split('/').pop() + (new Date().getTime()); }
+	if(options.skip){
+		options.skip = strToRe(options.skip, 'Global,');
+	}else{
+		options.skip = [];
+	}
 	if(options.builders){
 		for(var i = 0, len = options.builders.length; i < len; i++){
-			var ext = options.builders[i].ext;
-			if(ext){
-				options.builders[i].ext = ext ? new RegExp('\\.'+ext+'$','i') : /\.[^]+?$/i;
+			var builder = options.builders[i];
+			if(builder.ext){
+				builder.ext = builder.ext ? new RegExp('\\.' + builder.ext + '$','i') : /\.[^]+?$/i;
 			}
+			builder.skip = options.skip.concat(strToRe(builder.skip || [], 'Builder with index: '+i+','));
 		}
 	}
 	resolveFiles(options.input, options, true, function(root){
