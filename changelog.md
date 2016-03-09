@@ -13,3 +13,9 @@
 	- Fixed resolving
 	- Added async reading for resolving files
 	- Added skip options for global init and builder only
+
+# 1.0.8
+## 09.03.2016
+	- Fixed exports replacing
+	- Added instance creating
+	- Added Custom port for ws

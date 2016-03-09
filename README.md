@@ -67,7 +67,7 @@ Include file like function.
 
 ```
 	var builder = require('amd-pack');
-	builder({
+	builder()({
 		input: './dist/component.jsx',
 		output: './src/Slider.js',
 		name: 'Slider',
@@ -104,7 +104,7 @@ Include file like function.
 For skiping some file you need added RegExp string for some path.
 ```
 	var builder = require('amd-pack');
-	builder({
+	builder()({
 		input: './dist/component.jsx',
 		output: './src/Slider.js',
 		name: 'Slider',

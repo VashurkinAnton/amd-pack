@@ -1,6 +1,6 @@
 {
   "name": "amd-pack",
-  "version": "1.0.6",
+  "version": "1.0.8",
   "description": "Quick build your app into AMD library. No setting files only one command!",
   "main": "index.js",
   "directories": {

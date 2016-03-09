@@ -15,7 +15,7 @@ commander
 
 if(commander.input && commander.output){
 	console.time('build time:');
-	build({
+	build()({
 		input: commander.input, 
 		output: commander.output, 
 		name: commander.name, 
