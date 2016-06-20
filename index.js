@@ -219,10 +219,19 @@ module.exports = function(){ // wrapping
 			try{
 				fs.statSync(resolvedPath);
 			}catch(e){
-				resolvedPath = require.resolve(dep);
+				try{
+					resolvedPath = require.resolve(dep);
+					console.warn('Dependency: ' + dep + ' not found!');
+				}catch(e){
+					resolvedPath = null;
+				}
 			}
-			source = source.replace(dep.path || dep, cutter(resolvedPath));
-			return dep.path ? {path: resolvedPath, type: dep.type} : resolvedPath;
+			if(resolvedPath){
+				source = source.replace(dep.path || dep, cutter(resolvedPath));
+				return dep.path ? {path: resolvedPath, type: dep.type} : resolvedPath;
+			}else{
+				return null;
+			}
 		}).filter(Boolean);
 		return {deps: deps, source: source};
 	}
@@ -244,42 +253,57 @@ module.exports = function(){ // wrapping
 		return source.replace(/module\.?\[?\'?\"?exports\"?\'?\]?[ \t\n\r]*\=/ig, 'return ');
 	}
 	function runBuilders(type, path, source, builders, cl){
-		var activeBuilders = builders.filter(function(item){
-			return (
-				item.action === type && 
-				(!item.ext || item.ext.test(path)) &&
-				!item.skip.some(function(re){
-					return re.test(path);
-				})
-			)
-		});
-		async.each(activeBuilders, function(builder, callback){
-			builder.handler(source, function(newSource){
-				source = newSource;
-				callback();
+		if(builders && builders.length){
+			var activeBuilders = builders.filter(function(item){
+				return (
+					item.action === type && 
+					(!item.ext || item.ext.test(path)) &&
+					!item.skip.some(function(re){
+						return re.test(path);
+					})
+				)
 			});
-		}, function(){
-			cl(source);
-		});
-	}
-	function loadFile(path, builders, cl){
-		fs.readFile(path, 'utf-8', function(err, source){
-			if(!builders){
+			async.each(activeBuilders, function(builder, callback){
+				builder.handler(source, function(newSource){
+					source = newSource;
+					callback();
+				});
+			}, function(){
 				cl(source);
+			});
+		}else{
+			cl(source);
+		}
+	}
+	function loadFile(file, builders, cl){
+		if(!file.data){
+			fs.readFile(file.path, 'utf-8', function(err, source){
+				if(!builders){
+					cl(source);
+				}else{
+					runBuilders('loading', file.path, source, builders, cl)
+				}
+			});
+		}else{
+			if(!builders){
+				cl(file.data);
 			}else{
-				runBuilders('loading', path, source, builders, cl)
+				runBuilders('loading', file.path, file.data, builders, cl)
 			}
-		});
+		}
 	}
 	function resolveFiles(rootFile, options, isRoot, cl){
 		var end;
 		var wrapperType;
+		var data;
+		
 		if(rootFile.path){
 			wrapperType = rootFile.type;
 			rootFile = rootFile.path;
+			data = rootFile.data;
 		}
-		var resolvedPath = path.resolve(rootFile);
-		loadFile(resolvedPath, options.builders, function(source){
+		var resolvedPath = path.resolve(options.resolveFrom || '.', rootFile);
+		loadFile({data: data, path: resolvedPath}, options.builders, function(source){
 			var result = getDependencies(source, getDir(rootFile), options.cutter);
 			var cuttedPath = options.cutter(resolvedPath);
 			if(!isRoot){
@@ -378,7 +402,6 @@ module.exports = function(){ // wrapping
 		var postResolving = function(root){
 			if(options.watch && options.output){
 				var watcher = function(prev, next){
-					console.time('rebuild time:');
 					unWatch();
 					resolveFiles(options.input, options, true, function(){
 						if(options.socketUpdate){
@@ -387,7 +410,6 @@ module.exports = function(){ // wrapping
 							});
 						}
 						postResolving.apply(this, arguments);
-						console.timeEnd('rebuild time:');
 					});
 				};
 				var watch = function(){
@@ -410,13 +432,17 @@ module.exports = function(){ // wrapping
 					result = uglify.minify(result, {fromString: true}).code;
 				}
 				if(options.output){
-					fs.writeFileSync(options.output.replace('@name@', options.name), result, 'utf-8');
+					if(typeof options.output === 'string'){
+						fs.writeFileSync(options.output.replace('@name@', options.name), result, 'utf-8');
+					}else if(options.output instanceof Function){
+						options.output(result);
+					}
 				}else if(cl){
 					cl(result);
 				}
 			})
 		};
-		resolveFiles(options.input, options, true, postResolving);
+		resolveFiles(options.file || options.input, options, true, postResolving);
 	}
 
 	return build;
